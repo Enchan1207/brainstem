@@ -1,8 +1,8 @@
-# Tiny implementation of brainf**k
+# brainstem
 
 ## Overview
 
-ノリと勢いで作るBrainf**kインタプリタの実装
+ノリと勢いで作った Brainf**k VM
 
 ## License
 

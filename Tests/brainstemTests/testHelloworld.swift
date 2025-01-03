@@ -1,5 +1,5 @@
 import Testing
-@testable import brainfuck_impl
+@testable import brainstem
 
 
 @Test func testRunHelloWorld() async throws {
