@@ -1,5 +1,3 @@
-# brainstem
-
 <p align="center">
   <img src="logo.png" width="400px" align="center" alt="logo" />
 </p>
