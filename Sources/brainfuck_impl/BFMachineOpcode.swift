@@ -6,7 +6,9 @@
 //
 
 /// 仮想マシンが実行する命令
-public enum BFMachineOpcode {
+public enum BFMachineOpcode: RawRepresentable {
+    public typealias RawValue = Character
+    
     /// アドレス加算
     case IncrementAddress
     
@@ -31,7 +33,7 @@ public enum BFMachineOpcode {
     /// ループ終了
     case EndLoop
     
-    init?(_ rawValue: Character){
+    public init?(rawValue: Character){
         switch rawValue {
         case ">":
             self = .IncrementAddress
@@ -59,6 +61,27 @@ public enum BFMachineOpcode {
             
         default:
             return nil
+        }
+    }
+    
+    public var rawValue: Character {
+        switch self {
+        case .IncrementAddress:
+            return ">"
+        case .DecrementAddress:
+            return "<"
+        case .IncrementMemory:
+            return "+"
+        case .DecrementMemory:
+            return "-"
+        case .Write:
+            return "."
+        case .Read:
+            return ","
+        case .BeginLoop:
+            return "["
+        case .EndLoop:
+            return "]"
         }
     }
 }
