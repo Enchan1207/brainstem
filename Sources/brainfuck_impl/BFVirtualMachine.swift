@@ -5,11 +5,13 @@
 //  Created by EnchantCode on 2025/01/01.
 //
 
-public typealias BFAddress = Int
+public typealias BFAddress = UInt
 
 
 /// Brainfuck仮想マシン
 public final class BFVirtualMachine {
+    
+    // MARK: - Private properties
     
     /// 仮想マシン実行状態
     private enum BFMachineState {
@@ -42,97 +44,113 @@ public final class BFVirtualMachine {
         }
     }
     
-    /// プログラムカウンタ
-    private var programCounter: BFAddress = 0
+    // MARK: - Public properties
     
-    public var dataSource: BFProgramDataSource? {
+    /// プログラムカウンタ
+    private(set) public var programCounter: BFAddress = 0
+    
+    public weak var dataSource: BFProgramDataSource? {
         willSet {
             reset()
         }
     }
     
-    /// Brainfuckコードを実行する
-    public func run(){
-        while let opcode = fetchOpcode() {
-            handle(opcode)
-        }
+    public weak var delegate: BFVirtualMachineDelegate?
+    
+    // MARK: - Private methods
+    
+    /// 現在のプログラムカウンタから命令を読み出し、カウンタをインクリメントして返す
+    /// - Returns: 読み出した命令
+    private func fetchOpcode() -> Result<BFMachineOpcode, BFVirtualMachineError> {
+        guard let code = dataSource?.opcode(at: programCounter) else {return .failure(.InstructionFetchError(address: programCounter))}
+        programCounter += 1
+        return .success(code)
     }
     
     /// 単一のBrainfuckコードを処理する
     /// - Parameter opcode: 実行する命令
-    private func handle(_ opcode: BFMachineOpcode){
-        if case let .SkipToLoopEnd(depth) = state {
-            switch opcode {
+    private func exec(_ opcode: BFMachineOpcode) -> Result<BFMachineOpcode, BFVirtualMachineError> {
+        switch (state, opcode) {
             
-            case .BeginLoop:
-                // メモリの状態は気にせず、とりあえず戻りアドレススタックに積んでいく
-                returnAddressStack.append(programCounter)
-            
-            case .EndLoop:
-                // 目的の深さまで戻ってきたらステートを戻す
-                if returnAddressStack.count == depth {
-                    state = .Default
-                }
-                
-                // アドレススタックを取り出して捨てる
-                _ = returnAddressStack.popLast()
-                
-            default:
-                // ループ終端に達するまではオペコードを読み捨てる
-                break
-            }
-
-            return
-        }
-        
-        switch opcode {
-        case .BeginLoop:
+        case (.Default, .BeginLoop):
             returnAddressStack.append(programCounter - 1)
             if memoryValue == 0 {
                 state = .SkipToLoopEnd(depth: .init(returnAddressStack.count))
-                break
             }
             
-        case .EndLoop:
-            guard let returnAddress = returnAddressStack.popLast() else {
-                // TODO: エラー処理
-                print("Invalid end of loop")
-                break
-            }
+        case (.Default, .EndLoop):
+            guard let returnAddress = returnAddressStack.popLast() else {return .failure(.InvalidLoopEndError(address: programCounter - 1))}
             
             if memoryValue != 0 {
                 programCounter = returnAddress
             }
             
-        case .IncrementAddress:
+        case (.Default, .IncrementAddress):
             memoryPointer += 1
             
-        case .DecrementAddress:
+        case (.Default, .DecrementAddress):
+            guard memoryPointer > 0 else {return .failure(.MemoryAddressIndexOutOfBoundsError)}
             memoryPointer -= 1
             
-        case .IncrementMemory:
+        case (.Default, .IncrementMemory):
             memoryValue = (memoryValue ?? 0) + 1
             
-        case .DecrementMemory:
+        case (.Default, .DecrementMemory):
             memoryValue = (memoryValue ?? 0) - 1
             
-        case .Write:
+        case (.Default, .Write):
             guard let unicodeScalar = UnicodeScalar(memoryValue ?? 0) else {break}
             let character = Character(unicodeScalar)
+            // TODO: I/Oを逃がす
             print(character, terminator: "")
             
-        case .Read:
-            // TODO: read
+        case (.Default, .Read):
+            // TODO: I/Oを逃がす
+            break
+        
+        case (.SkipToLoopEnd(_), .BeginLoop):
+            // メモリの状態は気にせず、とりあえず戻りアドレススタックに積んでいく
+            returnAddressStack.append(programCounter)
+        
+        case (.SkipToLoopEnd(let depth), .EndLoop):
+            // 目的の深さまで戻ってきたらステートを戻す
+            if returnAddressStack.count == depth {
+                state = .Default
+            }
+            // アドレススタックを取り出して捨てる
+            _ = returnAddressStack.popLast()
+        
+        default:
+            break
+        }
+        
+        return .success(opcode)
+    }
+    
+    // MARK: - Public methods
+    
+    /// 仮想マシンを実行する
+    public func run() {
+        while true {
+            let result = step()
+            switch result {
+            case .success(_):
+                continue
+            case .failure(let error):
+                if case .InstructionFetchError(_) = error {
+                    delegate?.bfVirtualMachineDidFinishExecution(self)
+                }
+            }
             break
         }
     }
     
-    /// 現在のプログラムカウンタから命令を読み出し、カウンタをインクリメントして返す
-    /// - Returns: 読み出した命令
-    private func fetchOpcode() -> BFMachineOpcode? {
-        guard let code = dataSource?.opcode(at: programCounter) else {return nil}
-        programCounter += 1
-        return code
+    /// 仮想マシンをステップ実行する
+    /// - Returns: 実行が完了した命令またはエラー
+    public func step() -> Result<BFMachineOpcode, BFVirtualMachineError> {
+        let result = fetchOpcode().flatMap(exec)
+        self.delegate?.bfVirtualMachine(self, didExecuteOpcode: result)
+        return result
     }
     
     /// 仮想マシンをリセットする
