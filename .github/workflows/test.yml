@@ -1,0 +1,23 @@
+name: Unit testing
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "Sources/**"
+      - "Tests/**"
+      - "Package.swift"
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        run: swift test
